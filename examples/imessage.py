@@ -856,6 +856,135 @@ end tell
 
 
 @mcp.tool
+def get_all_messages_by_date(target_date: str, include_stats: bool = True) -> Dict[str, Any]:
+    """Get ALL messages from ALL chats on a specific date (your daily journal/TBT)
+    
+    Args:
+        target_date: Date in format 'YYYY-MM-DD' (e.g., '2024-01-15')
+        include_stats: Whether to include statistics about the day
+    
+    Returns:
+        Dictionary with messages, contacts involved, and optional stats
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        
+        # Parse the date and create start/end timestamps for that day
+        from datetime import datetime, timedelta
+        
+        # Parse the input date
+        dt_start = datetime.strptime(target_date, '%Y-%m-%d')
+        dt_end = dt_start + timedelta(days=1)
+        
+        # Convert to Apple epoch (nanoseconds since 2001-01-01)
+        # Unix timestamp for 2001-01-01 00:00:00 UTC is 978307200
+        apple_epoch_start = int((dt_start.timestamp() - 978307200) * 1000000000)
+        apple_epoch_end = int((dt_end.timestamp() - 978307200) * 1000000000)
+        
+        # Query to get all messages from that day
+        query = """
+        SELECT 
+            m.guid,
+            m.text,
+            m.is_from_me,
+            datetime(m.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch', 'localtime') as date_time,
+            time(m.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch', 'localtime') as time_only,
+            h.id as contact,
+            c.chat_identifier,
+            c.display_name as chat_name
+        FROM message m
+        LEFT JOIN handle h ON m.handle_id = h.ROWID
+        LEFT JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+        LEFT JOIN chat c ON cmj.chat_id = c.ROWID
+        WHERE m.date >= ? AND m.date < ?
+            AND m.text IS NOT NULL
+        ORDER BY m.date ASC
+        """
+        
+        cursor.execute(query, (apple_epoch_start, apple_epoch_end))
+        messages = []
+        contacts_involved = set()
+        conversation_threads = {}
+        
+        for row in cursor.fetchall():
+            msg = dict(row)
+            contact = msg.get("contact", "Unknown")
+            
+            # Track unique contacts
+            if contact and not msg.get("is_from_me"):
+                contacts_involved.add(contact)
+            
+            # Group by conversation thread
+            chat_id = msg.get("chat_identifier", "Unknown")
+            if chat_id not in conversation_threads:
+                conversation_threads[chat_id] = []
+            conversation_threads[chat_id].append(msg)
+            
+            messages.append(msg)
+        
+        result = {
+            "date": target_date,
+            "total_messages": len(messages),
+            "messages": messages,
+            "contacts_involved": list(contacts_involved),
+            "conversation_count": len(conversation_threads)
+        }
+        
+        # Add statistics if requested
+        if include_stats:
+            sent_count = sum(1 for m in messages if m.get("is_from_me"))
+            received_count = len(messages) - sent_count
+            
+            # Find most active conversation
+            most_active_chat = None
+            max_messages = 0
+            for chat_id, msgs in conversation_threads.items():
+                if len(msgs) > max_messages:
+                    max_messages = len(msgs)
+                    most_active_chat = chat_id
+            
+            # Time-based analysis
+            if messages:
+                first_msg_time = messages[0].get("time_only", "")
+                last_msg_time = messages[-1].get("time_only", "")
+                
+                # Get busiest hour
+                from collections import Counter
+                hours = []
+                for msg in messages:
+                    time_str = msg.get("time_only", "")
+                    if time_str:
+                        hour = time_str.split(":")[0]
+                        hours.append(f"{hour}:00")
+                
+                busiest_hour = None
+                if hours:
+                    counter = Counter(hours)
+                    busiest = counter.most_common(1)[0]
+                    busiest_hour = {"time": busiest[0], "message_count": busiest[1]}
+                
+                result["stats"] = {
+                    "sent_messages": sent_count,
+                    "received_messages": received_count,
+                    "unique_contacts": len(contacts_involved),
+                    "conversations": len(conversation_threads),
+                    "most_active_chat": most_active_chat,
+                    "most_active_chat_messages": max_messages,
+                    "first_message_time": first_msg_time,
+                    "last_message_time": last_msg_time,
+                    "busiest_hour": busiest_hour
+                }
+        
+        return result
+        
+    except Exception as e:
+        return {"error": f"Failed to get messages for date {target_date}: {str(e)}"}
+    finally:
+        conn.close()
+
+
+@mcp.tool
 def send_message(phone_number: str, message: str) -> Dict[str, Any]:
     """Send an iMessage to a phone number or email address
     
