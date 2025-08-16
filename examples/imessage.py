@@ -856,6 +856,72 @@ end tell
 
 
 @mcp.tool
+def send_message(phone_number: str, message: str) -> Dict[str, Any]:
+    """Send an iMessage to a phone number or email address
+    
+    Args:
+        phone_number: The recipient's phone number or email address
+        message: The message text to send
+    
+    Returns:
+        Dictionary with success status and details
+    """
+    if not phone_number or not phone_number.strip():
+        return {"error": "Phone number or email is required"}
+    
+    if not message or not message.strip():
+        return {"error": "Message text is required"}
+    
+    # Escape special characters in the message
+    escaped_message = message.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+    
+    # AppleScript to send the message
+    script = f'''
+tell application "Messages"
+    try
+        set targetService to 1st service whose service type = iMessage
+        set targetBuddy to buddy "{phone_number}" of targetService
+        send "{escaped_message}" to targetBuddy
+        return "SUCCESS"
+    on error errMsg
+        return "ERROR: " & errMsg
+    end try
+end tell
+'''
+    
+    try:
+        result = run_applescript(script, timeout=10)
+        
+        if result and "SUCCESS" in result:
+            return {
+                "success": True,
+                "message": f"Message sent to {phone_number}",
+                "recipient": phone_number,
+                "text": message
+            }
+        elif result and "ERROR:" in result:
+            error_msg = result.replace("ERROR: ", "")
+            return {
+                "success": False,
+                "error": f"Failed to send message: {error_msg}",
+                "recipient": phone_number
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Unknown error occurred while sending message",
+                "recipient": phone_number
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to send message: {str(e)}",
+            "recipient": phone_number
+        }
+
+
+@mcp.tool
 def check_contacts_permission() -> Dict[str, Any]:
     """Check if the app has permission to access Contacts and provide setup instructions"""
     try:
