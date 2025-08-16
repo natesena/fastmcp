@@ -1485,6 +1485,126 @@ def get_handle_details(handle_id: int) -> Optional[dict]:
         conn.close()
 
 
+@mcp.prompt
+def throwback_thursday(date: str) -> str:
+    """Generate a fun Throwback Thursday summary for any date
+    
+    Args:
+        date: The date to analyze in YYYY-MM-DD format
+    """
+    return f"""Please give me a Throwback Thursday type summary of my messages from {date}.
+
+Use the get_all_messages_by_date tool with date: {date}
+
+Please make sure to include:
+1. **Funny Quotes**: Extract the funniest or most memorable messages from that day
+2. **Emoji Usage Stats**: 
+   - Count total emojis used
+   - Most frequently used emojis
+   - Who used the most emojis
+3. **People Involved**: List everyone I messaged with and brief context
+4. **Conversation Highlights**: 
+   - Longest conversation thread
+   - Most active hour
+   - Any photos/links shared (if visible in text)
+5. **Nostalgic Summary**: Write a fun, nostalgic paragraph about what I was up to that day
+
+Format it like a social media #ThrowbackThursday post with emojis and enthusiasm!"""
+
+
+@mcp.prompt
+def daily_recap(date: str, focus: str = "all") -> str:
+    """Get a detailed recap of messages from a specific date
+    
+    Args:
+        date: The date to analyze (YYYY-MM-DD)
+        focus: What to focus on - "work", "personal", "funny", "important", or "all"
+    """
+    focus_instructions = {
+        "work": "Focus on work-related messages, meetings, and professional communications",
+        "personal": "Focus on friends, family, and personal conversations",
+        "funny": "Extract funny moments, jokes, memes, and lighthearted exchanges",
+        "important": "Highlight important information, decisions, plans, and commitments",
+        "all": "Include a comprehensive overview of all aspects"
+    }
+    
+    instruction = focus_instructions.get(focus, focus_instructions["all"])
+    
+    return f"""Analyze my messages from {date} with a specific focus.
+
+Use get_all_messages_by_date with date: {date}
+
+Focus area: {focus}
+{instruction}
+
+Include:
+1. Summary of the day's messaging activity
+2. Key conversations and participants  
+3. Extracted highlights based on focus area
+4. Any action items or follow-ups needed
+5. Interesting statistics or patterns
+
+Tailor the summary to the '{focus}' focus area."""
+
+
+@mcp.prompt
+def relationship_insights(contact_name: str, days_back: int = 30) -> str:
+    """Analyze your messaging relationship with someone
+    
+    Args:
+        contact_name: Name of the contact to analyze
+        days_back: How many days of history to analyze (default 30)
+    """
+    from datetime import datetime, timedelta
+    
+    dates_to_check = []
+    for i in range(min(days_back, 30)):  # Cap at 30 for performance
+        date = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
+        dates_to_check.append(date)
+    
+    return f"""Analyze my messaging relationship with {contact_name} over the past {days_back} days.
+
+First use find_contact_by_name to find {contact_name}.
+Then use get_messages_from_contact to get our recent messages.
+Also check get_all_messages_by_date for a few recent dates to see conversation patterns.
+
+Provide insights on:
+1. **Communication Frequency**: How often we message, trending up or down?
+2. **Conversation Balance**: Who initiates more? Response times?
+3. **Topics Discussed**: What do we mainly talk about?
+4. **Emotional Tone**: General mood of our conversations
+5. **Relationship Health**: Any signs that need attention?
+6. **Memorable Moments**: Funny or meaningful exchanges
+
+Give actionable insights to strengthen this relationship."""
+
+
+@mcp.prompt
+def message_search(keyword: str, contact: str = None, date_range: str = "last_week") -> str:
+    """Search for specific keywords in messages
+    
+    Args:
+        keyword: The word or phrase to search for
+        contact: Optional - specific contact to search within
+        date_range: "today", "last_week", "last_month", or specific date
+    """
+    contact_instruction = f"within messages from {contact}" if contact else "across all messages"
+    
+    return f"""Search for "{keyword}" {contact_instruction}.
+
+Use search_messages to find all occurrences of "{keyword}".
+Time range: {date_range}
+
+Organize results by:
+1. Most recent first
+2. Group by conversation/contact
+3. Show context around each mention
+4. Extract key information
+5. Highlight any action items
+
+Make it easy to find what I'm looking for."""
+
+
 if __name__ == "__main__":
     # Default: Run as stdio for fastmcp dev command
     import sys
